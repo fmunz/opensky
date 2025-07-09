@@ -1,3 +1,65 @@
+"""
+OpenSky Network Data Source for Apache Spark - Academic/Private Use Example
+
+This module provides a custom Spark data source for streaming real-time aircraft tracking data from the OpenSky Network API (https://opensky-network.org/). The OpenSky Network is a community-based receiver network that collects air traffic surveillance data and makes it available as open data to researchers and enthusiasts.
+
+Features:
+- Real-time streaming of aircraft positions, velocities, and flight data
+- Support for multiple geographic regions (Europe, North America, Asia, etc.)
+- OAuth2 authentication for higher API rate limits (4000 vs 100 calls/day)
+- Robust error handling with automatic retries and rate limiting
+- Data validation and type-safe parsing of aircraft state vectors
+- Configurable bounding boxes for focused data collection
+
+Usage Example (Academic/Research):
+    # Basic usage with default region (Europe)
+    df = spark.readStream.format("opensky").load()
+    
+    # With specific region and authentication
+    df = spark.readStream.format("opensky") \
+        .option("region", "NORTH_AMERICA") \
+        .option("client_id", "your_research_client_id") \
+        .option("client_secret", "your_research_client_secret") \
+        .load()
+
+Data Schema:
+    Each record contains comprehensive aircraft information including position (lat/lon),altitude, velocity, heading, call sign, ICAO identifier, and various flight status flags. All timestamps are in UTC timezone for consistency.
+
+Feed your own data to OpenSky Network https://opensky-network.org/feed
+
+Rate Limits & Responsible Usage:
+    - Anonymous access: 100 API calls per day
+    - Authenticated access: 4000 API calls per day (research accounts)
+    - Minimum 5-second interval between requests
+    - Do not exceed these limits or attempt to circumvent them
+
+Data Attribution:
+    When using this data in research or publications, please cite:
+    "The OpenSky Network, https://opensky-network.org"
+
+Author: Frank Munz, Databricks  - Example Only, No Warranty
+Purpose: Educational Example / Academic Research Tool
+Version: 1.0
+Last Updated: July-9-2023
+
+================================================================================
+LEGAL NOTICES & TERMS OF USE
+
+USAGE RESTRICTIONS:
+- Academic research and educational purposes only
+- Commercial use requires explicit permission from OpenSky Network
+- Must comply with OpenSky Network Terms of Use: https://opensky-network.org/about/terms-of-use
+
+DISCLAIMER & LIABILITY:
+This code is provided "AS IS" for educational purposes only. The author and Databricks make no warranties, express or implied, and disclaim all liability for any damages, losses, or issues arising from the use of this code. Users assume full responsibility for compliance with all applicable terms of service, laws, and regulations. Use at your own risk.
+
+For commercial use, contact OpenSky Network directly.
+================================================================================
+
+
+"""
+
+
 import requests
 import time
 from datetime import datetime, timezone
@@ -11,7 +73,6 @@ from pyspark.sql.datasource import SimpleDataSourceStreamReader, DataSource
 from pyspark.sql.types import *
 
 DS_NAME = "opensky"
-
 
 @dataclass
 class BoundingBox:
@@ -40,14 +101,9 @@ class RateLimitError(OpenSkyAPIError):
 class OpenSkyStreamReader(SimpleDataSourceStreamReader):
     
     DEFAULT_REGION = "EUROPE"
-
     MIN_REQUEST_INTERVAL = 5.0  # seconds between requests
-    
-    # API rate limits
     ANONYMOUS_RATE_LIMIT = 100  # calls per day
     AUTHENTICATED_RATE_LIMIT = 4000  # calls per day
-    
-    # Error retry configuration
     MAX_RETRIES = 3
     RETRY_BACKOFF = 2
     RETRY_STATUS_CODES = [429, 500, 502, 503, 504]
@@ -59,7 +115,6 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
         self.session = self._create_session()
         self.last_request_time = 0
         
-        # Configure region and bounding box
         region_name = options.get('region', self.DEFAULT_REGION).upper()
         try:
             self.bbox = Region[region_name].value
@@ -67,7 +122,6 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
             print(f"Invalid region '{region_name}'. Defaulting to {self.DEFAULT_REGION}.")
             self.bbox = Region[self.DEFAULT_REGION].value
         
-        # Configure OAuth2 authentication
         self.client_id = options.get('client_id')
         self.client_secret = options.get('client_secret')
         self.access_token = None
@@ -98,7 +152,6 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
             token_data = response.json()
             
             self.access_token = token_data["access_token"]
-            # Token expires in 30 minutes, refresh 5 minutes early
             expires_in = token_data.get("expires_in", 1800)
             self.token_expires_at = current_time + expires_in - 300
             
@@ -136,7 +189,6 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
         """Fetch states from OpenSky API with error handling"""
         self._handle_rate_limit()
         
-        # Refresh OAuth2 token if needed
         if self.client_id and self.client_secret:
             self._get_access_token()
         
@@ -147,7 +199,6 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
             'lomax': self.bbox.lomax
         }
         
-        # Set authorization header for OAuth2
         headers = {}
         if self.access_token:
             headers['Authorization'] = f'Bearer {self.access_token}'
@@ -222,9 +273,7 @@ class OpenSkyStreamReader(SimpleDataSourceStreamReader):
         )
 
     def readBetweenOffsets(self, start: Dict[str, int], end: Dict[str, int]) -> Iterator[Tuple]:
-        # Get data using existing read method
         data, _ = self.read(start)
-        # Return as iterator
         return iter(data)
         
     def read(self, start: Dict[str, int]) -> Tuple[List[Tuple], Dict[str, int]]:
@@ -256,7 +305,6 @@ class OpenSkyDataSource(DataSource):
         super().__init__(options or {})
         self.options = options or {}
         
-        # Validate options for OAuth2
         if 'client_id' in self.options and not self.options.get('client_secret'):
             raise ValueError("client_secret must be provided when client_id is set")
         
@@ -292,5 +340,4 @@ class OpenSkyDataSource(DataSource):
     def simpleStreamReader(self, schema: StructType) -> OpenSkyStreamReader:
         return OpenSkyStreamReader(schema, self.options)
 
-# Register the data source
 spark.dataSource.register(OpenSkyDataSource)
