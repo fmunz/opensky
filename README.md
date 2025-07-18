@@ -1,7 +1,3 @@
-
-
-
-
 ## Billions of Events, Thousands of Aircraft, One Simple Declarative Pipeline
 
 ![Aviation Data Processing Header](misc/header.gif)
@@ -118,8 +114,8 @@ You can analyze the streaming data with AI/BI Genie with simple English queries:
 ## Learn More
 
 - [OpenSky Network](https://opensky-network.org)
-- [Lakeflow Documentation](https://docs.databricks.com/lakeflow)
-- [PySpark Custom Data Sources](https://docs.databricks.com/en/ingestion/auto-loader/python-source-api.html)
+- [Lakeflow Documentation](https://docs.databricks.com/aws/en/dlt)
+- [PySpark Custom Data Sources](https://docs.databricks.com/aws/en/pyspark/datasources)
 
 ---
 
